@@ -1,0 +1,17 @@
+
+# .NET build folders
+bin/
+obj/
+
+# Visual Studio files
+.vs/
+*.user
+*.suo
+
+# Log files
+logs/
+*.log
+
+# Temporary files
+*.tmp
+*.bak
