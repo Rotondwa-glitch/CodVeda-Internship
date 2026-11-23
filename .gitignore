@@ -15,3 +15,12 @@ logs/
 # Temporary files
 *.tmp
 *.bak
+
+
+# SQLite temporary files and local database
+*.db
+*.db-shm
+*.db-wal
+
+# Visual Studio user settings
+*.csproj.user
