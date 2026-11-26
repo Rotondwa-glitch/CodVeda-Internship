@@ -1,5 +1,6 @@
 ﻿
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Diagnostics;
@@ -16,13 +17,38 @@ logger.LogInfo("Application started.");
 // Create cancellation controller.
 using CancellationTokenSource cts = new();
 
-Console.WriteLine("\nProcessing 10 records...");
+// Ask the user how many records to process.
+int totalRecords;
+
+while (true)
+{
+    Console.Write("\nHow many records would you like to process? ");
+
+    string? input = Console.ReadLine();
+
+    if (int.TryParse(input, out totalRecords) && totalRecords > 0)
+    {
+        break;
+    }
+
+    Console.WriteLine(
+        "Invalid input! Please enter a positive whole number.");
+}
+
+int processedRecords = 0;
+
+Console.WriteLine($"\nProcessing {totalRecords} records...");
 Console.WriteLine("Press C to cancel.");
 
 Stopwatch stopwatch = Stopwatch.StartNew();
 
 // Start asynchronous processing.
-Task processingTask = ProcessDataAsync(cts.Token, logger);
+Task processingTask = ProcessDataAsync(
+    cts.Token,
+    logger,
+    totalRecords,
+    count => processedRecords = count
+);
 
 logger.LogInfo("Data processing started.");
 
@@ -65,15 +91,31 @@ try
     logger.LogInfo($"Total processing time: {stopwatch.Elapsed.TotalSeconds:F2} seconds");
 
     Console.WriteLine("\nAll records processed successfully!");
+
+    GenerateReport(
+        "COMPLETED",
+        stopwatch.Elapsed.TotalSeconds,
+        totalRecords,
+        processedRecords,
+        "All records were processed successfully.");
 }
 catch (OperationCanceledException)
 {
     stopwatch.Stop();
 
     logger.LogWarning("Processing was cancelled by the user.");
-    logger.LogInfo($"Processing stopped after {stopwatch.Elapsed.TotalSeconds:F2} seconds");
+
+    logger.LogInfo(
+        $"Processing stopped after {stopwatch.Elapsed.TotalSeconds:F2} seconds");
 
     Console.WriteLine("\nProcessing was cancelled!");
+
+    GenerateReport(
+        "CANCELLED",
+        stopwatch.Elapsed.TotalSeconds,
+        totalRecords,
+        processedRecords,
+        "Processing was cancelled by the user.");
 }
 catch (Exception ex)
 {
@@ -82,6 +124,13 @@ catch (Exception ex)
     logger.LogError($"Processing failed: {ex.Message}");
 
     Console.WriteLine("\nAn unexpected error occurred.");
+
+    GenerateReport(
+        "FAILED",
+        stopwatch.Elapsed.TotalSeconds,
+        totalRecords,
+        processedRecords,
+        ex.Message);
 }
 
 // Application finished.
@@ -90,10 +139,10 @@ logger.LogInfo("Application finished.");
 // Asynchronous processing method.
 static async Task ProcessDataAsync(
     CancellationToken token,
-    AppLogger logger)
+    AppLogger logger,
+    int totalRecords,
+    Action<int> updateProgress)
 {
-    const int totalRecords = 10;
-
     for (int i = 1; i <= totalRecords; i++)
     {
         token.ThrowIfCancellationRequested();
@@ -112,5 +161,42 @@ static async Task ProcessDataAsync(
 
         logger.LogInfo(
             $"Record {i} completed. Progress: {percentage}%");
+
+        // Update successfully processed record count.
+        updateProgress(i);
     }
+}
+
+// Generate processing report.
+static void GenerateReport(
+    string status,
+    double processingTime,
+    int totalRecords,
+    int processedRecords,
+    string details)
+{
+    string reportFile = "processing-report.txt";
+
+    int remainingRecords = totalRecords - processedRecords;
+
+    string report =
+        "====================================\n" +
+        "       PROCESSING REPORT\n" +
+        "====================================\n" +
+        $"Date: {DateTime.Now}\n" +
+        $"Status: {status}\n" +
+        $"Total Records: {totalRecords}\n" +
+        $"Successfully Processed: {processedRecords}\n" +
+        $"Remaining Records: {remainingRecords}\n" +
+        $"Processing Time: {processingTime:F2} seconds\n" +
+        $"Details: {details}\n" +
+        "====================================\n\n";
+
+    File.AppendAllText(reportFile, report);
+
+    Console.WriteLine("\nProcessing report saved successfully!");
+
+    Console.WriteLine($"Total Records: {totalRecords}");
+    Console.WriteLine($"Successfully Processed: {processedRecords}");
+    Console.WriteLine($"Remaining Records: {remainingRecords}");
 }
