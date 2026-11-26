@@ -1,71 +1,116 @@
 ﻿
 using System;
-using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
+using System.Diagnostics;
 
 Console.WriteLine("====================================");
 Console.WriteLine("       ASYNC PROCESSING SYSTEM");
 Console.WriteLine("====================================");
 
-Console.WriteLine("Select the tasks you want to process:");
-Console.WriteLine("1. Student Records");
-Console.WriteLine("2. Payment Records");
-Console.WriteLine("3. Employee Records");
+// Create logger.
+AppLogger logger = new AppLogger();
 
-Console.Write("\nEnter your choices separated by commas (e.g. 1,2,3): ");
+logger.LogInfo("Application started.");
 
-string? input = Console.ReadLine();
+// Create cancellation controller.
+using CancellationTokenSource cts = new();
 
-string[] choices = (input ?? "").Split(',');
+Console.WriteLine("\nProcessing 10 records...");
+Console.WriteLine("Press C to cancel.");
 
-List<Task> tasks = new List<Task>();
+Stopwatch stopwatch = Stopwatch.StartNew();
 
-foreach (string choice in choices)
+// Start asynchronous processing.
+Task processingTask = ProcessDataAsync(cts.Token, logger);
+
+logger.LogInfo("Data processing started.");
+
+// Monitor keyboard input.
+while (!processingTask.IsCompleted)
 {
-    string selectedTask = choice.Trim();
-
-    switch (selectedTask)
+    if (Console.KeyAvailable)
     {
-        case "1":
-            tasks.Add(ProcessDataAsync("Student Records", 3000));
-            break;
+        ConsoleKeyInfo key = Console.ReadKey(true);
 
-        case "2":
-            tasks.Add(ProcessDataAsync("Payment Records", 2000));
-            break;
+        if (key.Key == ConsoleKey.C)
+        {
+            Console.Write("\nAre you sure you want to cancel? (Y/N): ");
 
-        case "3":
-            tasks.Add(ProcessDataAsync("Employee Records", 1000));
-            break;
+            ConsoleKeyInfo confirmation = Console.ReadKey(true);
 
-        default:
-            Console.WriteLine($"Invalid option: {selectedTask}");
-            break;
+            if (confirmation.Key == ConsoleKey.Y)
+            {
+                cts.Cancel();
+                logger.LogWarning("Cancellation requested.");
+            }
+            else
+            {
+                logger.LogInfo("Processing will continue.");
+            }
+        }
     }
+
+    await Task.Delay(100);
 }
 
-if (tasks.Count > 0)
+// Handle completion.
+try
 {
-    try
-    {
-        await Task.WhenAll(tasks);
-        Console.WriteLine("\nAll selected tasks completed!");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"\nProcessing error: {ex.GetBaseException().Message}");
-    }
+    await processingTask;
+
+    stopwatch.Stop();
+
+    logger.LogInfo("All records processed successfully.");
+    logger.LogInfo($"Total processing time: {stopwatch.Elapsed.TotalSeconds:F2} seconds");
+
+    Console.WriteLine("\nAll records processed successfully!");
 }
-else
+catch (OperationCanceledException)
 {
-    Console.WriteLine("No valid tasks were selected.");
+    stopwatch.Stop();
+
+    logger.LogWarning("Processing was cancelled by the user.");
+    logger.LogInfo($"Processing stopped after {stopwatch.Elapsed.TotalSeconds:F2} seconds");
+
+    Console.WriteLine("\nProcessing was cancelled!");
+}
+catch (Exception ex)
+{
+    stopwatch.Stop();
+
+    logger.LogError($"Processing failed: {ex.Message}");
+
+    Console.WriteLine("\nAn unexpected error occurred.");
 }
 
-static async Task ProcessDataAsync(string taskName, int delay)
+// Application finished.
+logger.LogInfo("Application finished.");
+
+// Asynchronous processing method.
+static async Task ProcessDataAsync(
+    CancellationToken token,
+    AppLogger logger)
 {
-    Console.WriteLine($"{taskName}: Processing started...");
+    const int totalRecords = 10;
 
-    await Task.Delay(delay);
+    for (int i = 1; i <= totalRecords; i++)
+    {
+        token.ThrowIfCancellationRequested();
 
-    Console.WriteLine($"{taskName}: Processing completed!");
+        await Task.Delay(1000, token);
+
+        int percentage = (i * 100) / totalRecords;
+        int progressBlocks = percentage / 10;
+
+        string progressBar =
+            new string('#', progressBlocks) +
+            new string('-', 10 - progressBlocks);
+
+        Console.WriteLine(
+            $"Record {i}/{totalRecords} [{progressBar}] {percentage}% completed");
+
+        logger.LogInfo(
+            $"Record {i} completed. Progress: {percentage}%");
+    }
 }
